@@ -22,6 +22,7 @@ from bcimbalance.seeds import generate_seed_registry, write_seed_registry
 SOURCE_REPOSITORY = "rzaroz/BreastCancer"
 SOURCE_REVISION = "df2a0919eacd8e98e9242c8f4002a231e6eb57eb"
 SOURCE_PATH = "MainDatasets/BreastCancerWisconsin(Diagnostic).csv"
+DEFAULT_LOCK_FILE = "data/registry/FOUNDATION_LOCK_v1.json"
 
 
 def pinned_source_url() -> str:
@@ -42,14 +43,41 @@ def _download_exact_bytes(url: str, destination: Path) -> None:
     destination.write_bytes(payload)
 
 
+def _load_lock(path: Path) -> dict:
+    with path.open("r", encoding="utf-8") as handle:
+        lock = json.load(handle)
+    if lock.get("schema_version") != "foundation-lock/v1":
+        raise RuntimeError("foundation lock schema mismatch")
+    if lock.get("protocol_version") != "1.0" or bool(lock.get("result_bearing")):
+        raise RuntimeError("foundation lock does not match frozen non-result-bearing protocol")
+    dataset = lock.get("dataset", {})
+    if dataset.get("source_repository") != SOURCE_REPOSITORY:
+        raise RuntimeError("foundation lock source repository mismatch")
+    if dataset.get("source_revision") != SOURCE_REVISION:
+        raise RuntimeError("foundation lock source revision mismatch")
+    if dataset.get("source_path") != SOURCE_PATH:
+        raise RuntimeError("foundation lock source path mismatch")
+    return lock
+
+
+def _assert_equal(name: str, actual, expected) -> None:
+    if actual != expected:
+        raise RuntimeError(f"foundation lock mismatch for {name}: expected={expected!r} actual={actual!r}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output-dir", default="artifacts/p1")
     parser.add_argument("--raw-path", default="data/raw/wdbc.csv")
-    parser.add_argument("--expected-sha256", default=None)
+    parser.add_argument("--lock-file", default=DEFAULT_LOCK_FILE)
     parser.add_argument("--git-commit", default=os.environ.get("FOUNDATION_GIT_COMMIT", "unknown"))
     parser.add_argument("--run-id", default="p1-foundation-acquisition")
     args = parser.parse_args()
+
+    lock = _load_lock(Path(args.lock_file))
+    dataset_lock = lock["dataset"]
+    folds_lock = lock["outer_folds"]
+    seed_lock = lock["seed_registry"]
 
     output_dir = Path(args.output_dir)
     raw_path = Path(args.raw_path)
@@ -60,20 +88,28 @@ def main() -> int:
     dataset_manifest = register_dataset(
         raw_path,
         dataset_registry,
-        expected_sha256=args.expected_sha256,
+        expected_sha256=str(dataset_lock["sha256"]),
         canonical_copy=None,
         source_uri=source_url,
         source_revision=SOURCE_REVISION,
     )
+    _assert_equal("dataset bytes", dataset_manifest["source_bytes"], int(dataset_lock["bytes"]))
+    _assert_equal("dataset rows", dataset_manifest["n_rows"], int(dataset_lock["rows"]))
+    _assert_equal("dataset features", dataset_manifest["n_features"], int(dataset_lock["features"]))
+    _assert_equal("dataset class counts", dataset_manifest["class_counts"], dataset_lock["class_counts"])
 
     frame = load_registered_dataset(raw_path, dataset_manifest["sha256"])
     split_artifact = build_outer_folds(frame, dataset_sha256=dataset_manifest["sha256"])
     split_path = output_dir / "outer_folds_v1.json"
     split_sha256 = write_split_artifact(split_path, split_artifact)
+    _assert_equal("split SHA-256", split_sha256, str(folds_lock["sha256"]))
+    _assert_equal("outer fold count", len(split_artifact["folds"]), int(folds_lock["count"]))
 
     seed_registry = generate_seed_registry()
     seed_path = output_dir / "seed_registry_v1.json"
     seed_sha256 = write_seed_registry(seed_path, seed_registry)
+    _assert_equal("seed registry SHA-256", seed_sha256, str(seed_lock["sha256"]))
+    _assert_equal("seed record count", seed_registry["n_records"], int(seed_lock["records"]))
 
     manifest = build_foundation_manifest(
         run_id=args.run_id,
@@ -82,6 +118,7 @@ def main() -> int:
         split_sha256=split_sha256,
         seed_registry_sha256=seed_sha256,
     )
+    manifest["foundation_lock"] = str(Path(args.lock_file))
     manifest["dataset_source_repository"] = SOURCE_REPOSITORY
     manifest["dataset_source_revision"] = SOURCE_REVISION
     manifest["dataset_source_path"] = SOURCE_PATH
@@ -91,6 +128,7 @@ def main() -> int:
     summary = {
         "protocol_version": manifest["protocol_version"],
         "result_bearing": False,
+        "foundation_lock": str(Path(args.lock_file)),
         "dataset_sha256": dataset_manifest["sha256"],
         "dataset_bytes": dataset_manifest["source_bytes"],
         "dataset_rows": dataset_manifest["n_rows"],
@@ -113,6 +151,7 @@ def main() -> int:
     print(f"OUTER_FOLDS={summary['outer_folds']}")
     print(f"SEED_REGISTRY_SHA256={summary['seed_registry_sha256']}")
     print(f"SEED_RECORDS={summary['seed_records']}")
+    print("FOUNDATION_LOCK=PASS")
     print("RESULT_BEARING=false")
     return 0
 
