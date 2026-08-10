@@ -9,6 +9,8 @@ on:
 jobs:
   foundation-tests:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -26,3 +28,17 @@ jobs:
 
       - name: Run non-result-bearing foundation tests
         run: python -m unittest discover -s tests -v
+
+      - name: Acquire pinned WDBC snapshot and build P1 metadata evidence
+        env:
+          FOUNDATION_GIT_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          python scripts/acquire_foundation_artifacts.py --output-dir artifacts/p1
+
+      - name: Upload P1 metadata evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: p1-foundation-artifacts
+          path: artifacts/p1/
+          if-no-files-found: error
+          retention-days: 90
