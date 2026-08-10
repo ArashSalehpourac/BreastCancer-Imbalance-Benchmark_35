@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import math
 import os
 import shutil
 import tempfile
@@ -81,7 +80,7 @@ def validate_wdbc_frame(frame: pd.DataFrame) -> pd.DataFrame:
     if missing or extra:
         raise DatasetValidationError(f"schema mismatch; missing={missing}, extra={extra}")
 
-    df = df.loc[:, CANONICAL_COLUMNS]
+    df = df.loc[:, list(CANONICAL_COLUMNS)]
 
     if df[ID_COLUMN].isna().any():
         raise DatasetValidationError("row identifier contains missing values")
@@ -97,7 +96,7 @@ def validate_wdbc_frame(frame: pd.DataFrame) -> pd.DataFrame:
         )
     df[TARGET_COLUMN] = labels
 
-    numeric = df.loc[:, FEATURE_COLUMNS].apply(pd.to_numeric, errors="coerce")
+    numeric = df.loc[:, list(FEATURE_COLUMNS)].apply(pd.to_numeric, errors="coerce")
     if numeric.isna().any().any():
         bad = numeric.columns[numeric.isna().any()].tolist()
         raise DatasetValidationError(f"predictor columns contain missing/non-numeric values: {bad}")
@@ -108,7 +107,7 @@ def validate_wdbc_frame(frame: pd.DataFrame) -> pd.DataFrame:
         raise DatasetValidationError(
             f"predictor matrix contains non-finite value at row={int(first[0])}, column={FEATURE_COLUMNS[int(first[1])]!r}"
         )
-    df.loc[:, FEATURE_COLUMNS] = numeric
+    df.loc[:, list(FEATURE_COLUMNS)] = numeric
 
     if len(df) < 10:
         raise DatasetValidationError("dataset contains too few rows for the frozen 10-fold protocol")
