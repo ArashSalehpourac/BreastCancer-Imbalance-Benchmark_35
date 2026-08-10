@@ -23,6 +23,8 @@ def main() -> int:
         help="Local canonical copy path; raw data are gitignored",
     )
     parser.add_argument("--expected-sha256", default=None)
+    parser.add_argument("--source-uri", default=None)
+    parser.add_argument("--source-revision", default=None)
     args = parser.parse_args()
 
     manifest = register_dataset(
@@ -30,6 +32,8 @@ def main() -> int:
         args.registry,
         expected_sha256=args.expected_sha256,
         canonical_copy=args.copy_to,
+        source_uri=args.source_uri,
+        source_revision=args.source_revision,
     )
     print(f"DATASET_REGISTERED_SHA256={manifest['sha256']}")
     print(f"DATASET_ROWS={manifest['n_rows']}")
