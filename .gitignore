@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+.pytest_cache/
+
+# IDE/OS
+.idea/
+.vscode/
+.DS_Store
+
+# Raw dataset bytes are registered by SHA-256 but not committed here.
+data/raw/*
+!data/raw/.gitkeep
+
+# Local scratch and temporary evidence
+*.tmp
+*.temp

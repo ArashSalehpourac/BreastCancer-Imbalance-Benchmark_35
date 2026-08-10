@@ -1,0 +1,34 @@
+{
+  "schema_version": "foundation-lock/v1",
+  "protocol_version": "1.0",
+  "result_bearing": false,
+  "dataset": {
+    "name": "Breast Cancer Wisconsin (Diagnostic)",
+    "source_repository": "rzaroz/BreastCancer",
+    "source_revision": "df2a0919eacd8e98e9242c8f4002a231e6eb57eb",
+    "source_path": "MainDatasets/BreastCancerWisconsin(Diagnostic).csv",
+    "sha256": "27f219231dbb30eecbfc1361407ed641ea01be43316e2c707a1baf82c9795e23",
+    "bytes": 124635,
+    "rows": 569,
+    "features": 30,
+    "class_counts": {
+      "B": 357,
+      "M": 212
+    }
+  },
+  "outer_folds": {
+    "design": "5x10 repeated stratified",
+    "count": 50,
+    "sha256": "00114e7735fc4eb012ecf248010b18b441cce4a74e0d1540115bbaff543d764a"
+  },
+  "seed_registry": {
+    "master_seed": 20260810,
+    "records": 3600,
+    "sha256": "985f5614275ef880213bf775cded0b8e3867fb011f43df817b48d94bb5af73e2"
+  },
+  "originating_ci": {
+    "workflow_run": 31403398374,
+    "artifact_id": 9068592719,
+    "artifact_zip_sha256": "c3a2f9c187474c2afb218951bcf56534840045a17a19e861f1ab3243a94cd737"
+  }
+}

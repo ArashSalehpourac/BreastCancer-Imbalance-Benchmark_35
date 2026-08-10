@@ -10,40 +10,38 @@ Re-run the study from zero using a leakage-safe evaluation design, produce audit
 
 The public repository `rzaroz/BreastCancer` is treated as a historical/reference implementation only. Its code and reported outputs are not accepted as evidence for the new manuscript unless independently reproduced by this repository.
 
-## Core experimental factors
+## Frozen experimental protocol
 
-Oversampling / data-generation conditions:
+Experimental Protocol v1.0 is frozen in `docs/EXPERIMENTAL_PROTOCOL_v1.0.md` and was merged at commit `00765102707ca0cce5b169af2b6436a91c643a87` before any fresh result-bearing experiment.
 
-- Original / no resampling
-- ADASYN
-- Borderline-SMOTE
-- SMOTE
-- SMOTE-Tomek
-- CTGAN
-
-Ensemble classifiers:
-
-- Random Forest
-- AdaBoost
-- XGBoost
-- LightGBM
+The primary benchmark is prespecified as six imbalance conditions (baseline, ADASYN, Borderline-SMOTE, SMOTE, SMOTE-Tomek, CTGAN) × four ensemble classifiers (Random Forest, AdaBoost, XGBoost, LightGBM) under shared 5×10 repeated stratified outer cross-validation and three deterministic stochastic replicates.
 
 ## Non-negotiable validity rules
 
 1. Split/fold assignment occurs before any resampling or synthetic-data generation.
 2. Resampling is fitted only on the training partition of each fold.
-3. Test/validation partitions remain untouched.
+3. Test partitions remain untouched.
 4. CTGAN is trained independently inside the corresponding training partition; no synthetic sample may be generated using held-out observations.
-5. Repeated stratified cross-validation and explicit random seeds will be used instead of relying on one 80:20 split.
-6. All preprocessing, tuning, resampling, and model fitting must be fold-local to prevent leakage.
-7. Raw per-fold/per-seed outputs must be preserved before aggregate tables or figures are produced.
-8. Manuscript numbers, tables, and figures must be generated from auditable experiment outputs rather than manually copied from historical reports.
-9. No scientific claim is accepted merely because it appears in the previous manuscript or repository.
-10. The manuscript will clearly distinguish benchmark evidence from clinical validation; WDBC results will not be presented as prospective clinical validation.
+5. All preprocessing, resampling, model fitting, and any future tuning must be fold-local.
+6. Raw per-fold/per-seed evidence must be preserved before aggregate tables or figures are produced.
+7. Manuscript numbers, tables, and figures must be generated from auditable experiment outputs rather than manually copied from historical reports.
+8. No scientific claim is accepted merely because it appears in the previous manuscript or repository.
+9. WDBC benchmark evidence must not be presented as prospective clinical validation.
 
-## Planned evidence
+## P1 reproducibility foundation
 
-Primary metrics will include accuracy, balanced accuracy, macro-F1, malignant-class recall/sensitivity, specificity, MCC, ROC-AUC, PR-AUC, false-negative rate, and calibration measures when probabilities are available. Statistical comparisons and confidence intervals will be derived from repeated held-out folds/seeds.
+Issue #3 and branch `p1/reproducibility-foundation` implement infrastructure only:
+
+- exact dataset SHA-256 registration and schema validation;
+- immutable shared 5×10 outer-fold artifact generation and hashing;
+- deterministic 3,600-record seed registry;
+- atomic evidence writers and non-result-bearing provenance manifests;
+- typed leakage guards separating train and test partitions;
+- unit/CI tests for hashes, schema gates, split invariants, seeds, evidence writes, and leakage protection.
+
+No RF/AdaBoost/XGBoost/LightGBM scientific evaluation and no ADASYN/Borderline-SMOTE/SMOTE/SMOTE-Tomek/CTGAN execution are authorized in P1.
+
+See `docs/P1_REPRODUCIBILITY_FOUNDATION.md`.
 
 ## Storage policy
 
@@ -52,4 +50,4 @@ Primary metrics will include accuracy, balanced accuracy, macro-F1, malignant-cl
 
 ## Current status
 
-Repository initialized. No experiment has yet been authorized or accepted as scientific evidence.
+Protocol v1.0 is frozen. P1 foundation implementation is under review. Fresh result-bearing experiments: **0**.
