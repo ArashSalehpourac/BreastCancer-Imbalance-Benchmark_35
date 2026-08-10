@@ -1,0 +1,45 @@
+name: P1C Colab Foundation CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [p1c/colab-foundation-harness]
+
+jobs:
+  colab-foundation-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install foundation package
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+
+      - name: Run foundation and Colab harness tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Confirm harness remains non-result-bearing
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          required = [
+              Path('src/bcimbalance/colab_gate.py'),
+              Path('scripts/verify_colab_foundation.py'),
+              Path('colab/P1C_COLAB_FOUNDATION_GATE.ipynb'),
+              Path('data/registry/FOUNDATION_LOCK_v1.json'),
+          ]
+          missing = [str(path) for path in required if not path.is_file()]
+          if missing:
+              raise SystemExit(f'missing required harness files: {missing}')
+          print('P1C_SCOPE_GATE=PASS')
+          print('RESULT_BEARING=false')
+          PY
