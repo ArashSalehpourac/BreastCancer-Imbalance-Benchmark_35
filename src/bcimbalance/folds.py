@@ -31,6 +31,11 @@ def _payload_hash(payload_without_hash: dict[str, Any]) -> str:
     return hashlib.sha256(_canonical_json_bytes(payload_without_hash)).hexdigest()
 
 
+def _is_sha256(value: object) -> bool:
+    text = str(value).lower()
+    return len(text) == 64 and all(char in "0123456789abcdef" for char in text)
+
+
 def _atomic_json_write(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     encoded = json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False).encode("utf-8") + b"\n"
@@ -51,6 +56,11 @@ def build_outer_folds(
     n_repeats: int = N_REPEATS,
 ) -> dict[str, Any]:
     """Build the frozen shared 5×10 outer-fold artifact from canonical row order."""
+    if int(master_seed) != MASTER_SEED or int(n_splits) != N_SPLITS or int(n_repeats) != N_REPEATS:
+        raise SplitValidationError("outer-fold generation parameters must match frozen Protocol v1.0")
+    if not _is_sha256(dataset_sha256):
+        raise SplitValidationError("dataset_sha256 must be a 64-character hexadecimal SHA-256")
+
     ids = frame[ID_COLUMN].astype(str).tolist()
     labels = frame[TARGET_COLUMN].astype(str).tolist()
     if len(ids) != len(set(ids)):
@@ -101,9 +111,20 @@ def build_outer_folds(
 
 
 def verify_split_artifact(artifact: dict[str, Any], *, require_hash: bool = True) -> None:
+    if artifact.get("schema_version") != SPLIT_SCHEMA_VERSION:
+        raise SplitValidationError("split artifact schema version mismatch")
+    if artifact.get("protocol_version") != PROTOCOL_VERSION:
+        raise SplitValidationError("split artifact protocol version mismatch")
+    if int(artifact.get("master_seed", -1)) != MASTER_SEED:
+        raise SplitValidationError("split artifact master seed mismatch")
+    if not _is_sha256(artifact.get("dataset_sha256", "")):
+        raise SplitValidationError("split artifact dataset_sha256 is invalid")
+
     row_ids = [str(v) for v in artifact.get("row_ids", [])]
     if not row_ids or len(row_ids) != len(set(row_ids)):
         raise SplitValidationError("split artifact row_ids must be non-empty and unique")
+    if int(artifact.get("row_count", -1)) != len(row_ids):
+        raise SplitValidationError("split artifact row_count does not match row_ids")
 
     n_splits = int(artifact.get("n_splits", -1))
     n_repeats = int(artifact.get("n_repeats", -1))
@@ -122,21 +143,33 @@ def verify_split_artifact(artifact: dict[str, Any], *, require_hash: bool = True
     for fold in folds:
         repeat = int(fold["repeat_index"])
         fold_index = int(fold["fold_index"])
+        split_index = int(fold["split_index"])
         key = (repeat, fold_index)
         if key in seen_keys:
             raise SplitValidationError(f"duplicate repeat/fold key: {key}")
         seen_keys.add(key)
         if not (0 <= repeat < n_repeats and 0 <= fold_index < n_splits):
             raise SplitValidationError(f"out-of-range repeat/fold key: {key}")
+        if split_index != repeat * n_splits + fold_index:
+            raise SplitValidationError(f"split_index inconsistent with repeat/fold key: {key}")
 
-        train = {str(v) for v in fold["train_ids"]}
-        test = {str(v) for v in fold["test_ids"]}
+        train_ids = [str(v) for v in fold["train_ids"]]
+        test_ids = [str(v) for v in fold["test_ids"]]
+        train = set(train_ids)
+        test = set(test_ids)
         if train & test:
             raise SplitValidationError(f"train/test overlap in repeat={repeat} fold={fold_index}")
         if train | test != all_ids:
             raise SplitValidationError(f"train/test union does not cover all rows in repeat={repeat} fold={fold_index}")
-        if len(train) != len(fold["train_ids"]) or len(test) != len(fold["test_ids"]):
+        if len(train) != len(train_ids) or len(test) != len(test_ids):
             raise SplitValidationError(f"duplicate IDs inside fold repeat={repeat} fold={fold_index}")
+
+        train_counts = fold.get("train_class_counts", {})
+        test_counts = fold.get("test_class_counts", {})
+        if sum(int(v) for v in train_counts.values()) != len(train_ids):
+            raise SplitValidationError(f"train class counts do not match train rows for {key}")
+        if sum(int(v) for v in test_counts.values()) != len(test_ids):
+            raise SplitValidationError(f"test class counts do not match test rows for {key}")
         test_counts_by_repeat[repeat].update(test)
 
     if seen_keys != {(r, f) for r in range(n_repeats) for f in range(n_splits)}:
@@ -149,7 +182,7 @@ def verify_split_artifact(artifact: dict[str, Any], *, require_hash: bool = True
 
     if require_hash:
         stored_hash = str(artifact.get("split_sha256", "")).lower()
-        if len(stored_hash) != 64:
+        if not _is_sha256(stored_hash):
             raise SplitValidationError("missing/invalid split_sha256")
         copy = dict(artifact)
         copy.pop("split_sha256", None)
