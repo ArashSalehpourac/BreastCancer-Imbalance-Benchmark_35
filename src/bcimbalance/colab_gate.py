@@ -128,8 +128,9 @@ def verify_colab_foundation(
         dataset_sha256=actual_dataset_sha,
         split_sha256=split_artifact["split_sha256"],
         seed_registry_sha256=seed_registry["registry_sha256"],
-        phase="P1C-colab-foundation",
+        phase="P1-foundation",
     )
+    manifest["subphase"] = "P1C-colab-foundation"
     manifest["foundation_base_commit"] = FOUNDATION_BASE_COMMIT
     manifest["foundation_lock_sha256"] = lock_sha256
     manifest["colab_gate_report_sha256"] = report_receipt.sha256
