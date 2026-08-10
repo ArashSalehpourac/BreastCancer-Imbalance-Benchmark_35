@@ -73,12 +73,12 @@ def partition_fold(
 
     training = TrainingPartition(
         ids=tuple(train_key),
-        X=train_frame.loc[:, FEATURE_COLUMNS].copy(deep=True),
+        X=train_frame.loc[:, list(FEATURE_COLUMNS)].copy(deep=True),
         y=train_frame[TARGET_COLUMN].copy(deep=True),
     )
     testing = TestingPartition(
         ids=tuple(test_key),
-        X=test_frame.loc[:, FEATURE_COLUMNS].copy(deep=True),
+        X=test_frame.loc[:, list(FEATURE_COLUMNS)].copy(deep=True),
         y=test_frame[TARGET_COLUMN].copy(deep=True),
     )
     return training, testing
