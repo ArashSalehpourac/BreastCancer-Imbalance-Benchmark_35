@@ -37,6 +37,11 @@ def _sha256_bytes(payload: bytes) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
+def _is_sha256(value: object) -> bool:
+    text = str(value).lower()
+    return len(text) == 64 and all(char in "0123456789abcdef" for char in text)
+
+
 def _atomic_write(path: Path, payload: bytes) -> EvidenceReceipt:
     path.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile("wb", dir=path.parent, delete=False) as tmp:
@@ -113,11 +118,11 @@ def build_foundation_manifest(
         raise EvidenceError("run_id must be non-empty")
     if len(git_commit.strip()) < 7:
         raise EvidenceError("git_commit must be a commit identifier")
-    if len(dataset_sha256.strip()) != 64:
-        raise EvidenceError("dataset_sha256 must be a 64-character SHA-256")
+    if not _is_sha256(dataset_sha256):
+        raise EvidenceError("dataset_sha256 must be a 64-character hexadecimal SHA-256")
     for name, value in (("split_sha256", split_sha256), ("seed_registry_sha256", seed_registry_sha256)):
-        if value is not None and len(value.strip()) != 64:
-            raise EvidenceError(f"{name} must be a 64-character SHA-256 when present")
+        if value is not None and not _is_sha256(value):
+            raise EvidenceError(f"{name} must be a 64-character hexadecimal SHA-256 when present")
 
     return {
         "schema_version": RUN_MANIFEST_SCHEMA_VERSION,
@@ -153,14 +158,24 @@ def validate_foundation_manifest(manifest: Mapping[str, Any]) -> None:
     missing = sorted(required - set(manifest))
     if missing:
         raise EvidenceError(f"manifest missing fields: {missing}")
+    if manifest["schema_version"] != RUN_MANIFEST_SCHEMA_VERSION:
+        raise EvidenceError("manifest schema version mismatch")
+    if manifest["evidence_schema_version"] != EVIDENCE_SCHEMA_VERSION:
+        raise EvidenceError("manifest evidence schema version mismatch")
     if manifest["protocol_version"] != PROTOCOL_VERSION:
         raise EvidenceError("manifest protocol version mismatch")
+    if str(manifest["phase"]) != "P1-foundation":
+        raise EvidenceError("P1 foundation manifest phase mismatch")
     if int(manifest["master_seed"]) != MASTER_SEED:
         raise EvidenceError("manifest master seed mismatch")
     if bool(manifest["result_bearing"]):
         raise EvidenceError("P1 foundation manifests must never be result-bearing")
-    if len(str(manifest["dataset_sha256"])) != 64:
+    if not _is_sha256(manifest["dataset_sha256"]):
         raise EvidenceError("manifest dataset SHA-256 is invalid")
+    for name in ("split_sha256", "seed_registry_sha256"):
+        value = manifest.get(name)
+        if value is not None and not _is_sha256(value):
+            raise EvidenceError(f"manifest {name} is invalid")
 
 
 def write_foundation_manifest(path: str | os.PathLike[str], manifest: Mapping[str, Any]) -> EvidenceReceipt:
