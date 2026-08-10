@@ -135,6 +135,8 @@ def register_dataset(
     *,
     expected_sha256: str | None = None,
     canonical_copy: str | os.PathLike[str] | None = None,
+    source_uri: str | None = None,
+    source_revision: str | None = None,
 ) -> dict[str, Any]:
     """Register exact source bytes after schema validation; optionally copy them locally."""
     source_path = Path(source)
@@ -165,6 +167,8 @@ def register_dataset(
         "dataset_name": "Breast Cancer Wisconsin (Diagnostic)",
         "registered_utc": datetime.now(timezone.utc).isoformat(),
         "source_filename": source_path.name,
+        "source_uri": source_uri,
+        "source_revision": source_revision,
         "source_bytes": source_path.stat().st_size,
         "sha256": digest,
         "n_rows": int(len(validated)),
