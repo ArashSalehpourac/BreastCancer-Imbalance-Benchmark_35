@@ -1,0 +1,78 @@
+{
+  "artifact_result_bearing": false,
+  "describes_result_bearing_evidence": true,
+  "no_manual_transcription": true,
+  "protocol_version": "1.0",
+  "required_artifacts": {
+    "bootstrap_intervals": {
+      "path": "evidence/stats/bootstrap_intervals.csv"
+    },
+    "ctgan_quality": {
+      "path": "evidence/raw/ctgan_quality.csv"
+    },
+    "fold_assignments": {
+      "path": "evidence/splits/fold_assignments.csv"
+    },
+    "fold_metrics": {
+      "path": "evidence/raw/fold_metrics.csv"
+    },
+    "interaction_tests": {
+      "path": "evidence/stats/interaction_tests.csv"
+    },
+    "predictions": {
+      "path": "evidence/raw/predictions.csv",
+      "required_columns": [
+        "run_id",
+        "protocol_version",
+        "git_commit",
+        "dataset_sha256",
+        "row_id",
+        "repeat",
+        "fold",
+        "method",
+        "classifier",
+        "replicate",
+        "seed",
+        "y_true",
+        "p_malignant",
+        "threshold",
+        "y_pred"
+      ]
+    },
+    "primary_tests": {
+      "path": "evidence/stats/primary_tests.csv"
+    },
+    "publication_figures": {
+      "path_pattern": "evidence/publication/figure_source_*.csv"
+    },
+    "publication_tables": {
+      "path_pattern": "evidence/publication/table_source_*.csv"
+    },
+    "resampling_audit": {
+      "path": "evidence/raw/resampling_audit.csv"
+    },
+    "run_manifest": {
+      "path": "evidence/manifests/run_manifest.json",
+      "required_fields": [
+        "run_id",
+        "protocol_version",
+        "git_commit",
+        "dataset_sha256",
+        "split_sha256",
+        "master_seed",
+        "software_versions",
+        "operating_system",
+        "python_version",
+        "hardware_summary",
+        "utc_start",
+        "utc_end",
+        "classifier_parameters",
+        "resampler_parameters",
+        "ctgan_parameters",
+        "validation_gates"
+      ]
+    }
+  },
+  "schema_sha256": "7819dd71c49d3c5c686ca76079a92f0b5399596d0de71d2964eca8ece8af4686",
+  "schema_version": "result-evidence/v1"
+}
