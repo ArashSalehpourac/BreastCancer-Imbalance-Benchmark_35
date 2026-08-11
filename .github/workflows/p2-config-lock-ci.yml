@@ -10,6 +10,8 @@ jobs:
   p2-config-lock:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      P2_CONFIG_LOCK_CI: "1"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
