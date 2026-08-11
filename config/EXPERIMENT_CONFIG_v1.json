@@ -1,0 +1,297 @@
+{
+  "authorized_base_commit": "bb37920a134d38edc72c6b7ba2ce97d7c93b96d2",
+  "classifiers": {
+    "adaboost": {
+      "class": "sklearn.ensemble.AdaBoostClassifier",
+      "parameters": {
+        "estimator": null,
+        "learning_rate": 1.0,
+        "n_estimators": 50,
+        "random_state": "$SEED"
+      }
+    },
+    "lightgbm": {
+      "class": "lightgbm.LGBMClassifier",
+      "parameters": {
+        "boosting_type": "gbdt",
+        "class_weight": null,
+        "colsample_bytree": 1.0,
+        "deterministic": true,
+        "device_type": "cpu",
+        "force_col_wise": true,
+        "importance_type": "split",
+        "learning_rate": 0.1,
+        "max_depth": -1,
+        "min_child_samples": 20,
+        "min_child_weight": 0.001,
+        "min_split_gain": 0.0,
+        "n_estimators": 100,
+        "n_jobs": 1,
+        "num_leaves": 31,
+        "objective": "binary",
+        "random_state": "$SEED",
+        "reg_alpha": 0.0,
+        "reg_lambda": 0.0,
+        "subsample": 1.0,
+        "subsample_for_bin": 200000,
+        "subsample_freq": 0,
+        "verbosity": -1
+      }
+    },
+    "rf": {
+      "class": "sklearn.ensemble.RandomForestClassifier",
+      "parameters": {
+        "bootstrap": true,
+        "ccp_alpha": 0.0,
+        "class_weight": null,
+        "criterion": "gini",
+        "max_depth": null,
+        "max_features": "sqrt",
+        "max_leaf_nodes": null,
+        "max_samples": null,
+        "min_impurity_decrease": 0.0,
+        "min_samples_leaf": 1,
+        "min_samples_split": 2,
+        "min_weight_fraction_leaf": 0.0,
+        "monotonic_cst": null,
+        "n_estimators": 100,
+        "n_jobs": 1,
+        "oob_score": false,
+        "random_state": "$SEED",
+        "verbose": 0,
+        "warm_start": false
+      }
+    },
+    "xgboost": {
+      "class": "xgboost.XGBClassifier",
+      "parameters": {
+        "booster": "gbtree",
+        "colsample_bytree": 1.0,
+        "device": "cpu",
+        "eval_metric": "logloss",
+        "gamma": 0.0,
+        "learning_rate": 0.3,
+        "max_depth": 6,
+        "min_child_weight": 1.0,
+        "n_estimators": 100,
+        "n_jobs": 1,
+        "objective": "binary:logistic",
+        "random_state": "$SEED",
+        "reg_alpha": 0.0,
+        "reg_lambda": 1.0,
+        "subsample": 1.0,
+        "tree_method": "hist",
+        "validate_parameters": true,
+        "verbosity": 0
+      }
+    }
+  },
+  "config_sha256": "71e82edad62dcf06382cf85dcd87e642049e80668eaa7dbd9913d7a5a5bb7dc9",
+  "config_version": "1.0",
+  "determinism": {
+    "environment_before_import": {
+      "MKL_NUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "PYTHONHASHSEED": "$SEED"
+    },
+    "process_model": "one isolated worker process per fold-method-classifier-replicate condition",
+    "python_calls": [
+      "random.seed($SEED)",
+      "numpy.random.seed($SEED)",
+      "torch.manual_seed($SEED)"
+    ],
+    "seed_source": "condition seed from frozen P1 seed registry",
+    "torch_policy": {
+      "cuda_allowed": false,
+      "set_num_threads": 1,
+      "use_deterministic_algorithms": true
+    }
+  },
+  "foundation_lock": {
+    "dataset_sha256": "27f219231dbb30eecbfc1361407ed641ea01be43316e2c707a1baf82c9795e23",
+    "master_seed": 20260810,
+    "path": "data/registry/FOUNDATION_LOCK_v1.json",
+    "seed_registry_sha256": "985f5614275ef880213bf775cded0b8e3867fb011f43df817b48d94bb5af73e2",
+    "sha256": "49291df347b8aa8453a68cf06296642f3939bfc3fe51ce452d3620d9c228e030",
+    "split_sha256": "00114e7735fc4eb012ecf248010b18b441cce4a74e0d1540115bbaff543d764a"
+  },
+  "imbalance_methods": {
+    "adasyn": {
+      "class": "imblearn.over_sampling.ADASYN",
+      "parameters": {
+        "n_neighbors": 5,
+        "random_state": "$SEED",
+        "sampling_strategy": 1.0
+      },
+      "training_only": true
+    },
+    "baseline": {
+      "class": null,
+      "parameters": {},
+      "training_only": true
+    },
+    "borderline_smote": {
+      "class": "imblearn.over_sampling.BorderlineSMOTE",
+      "parameters": {
+        "k_neighbors": 5,
+        "kind": "borderline-1",
+        "m_neighbors": 10,
+        "random_state": "$SEED",
+        "sampling_strategy": 1.0
+      },
+      "training_only": true
+    },
+    "ctgan": {
+      "class": "sdv.single_table.CTGANSynthesizer",
+      "conditional_sampling": {
+        "column_values": {
+          "diagnosis": "M"
+        },
+        "condition_class": "sdv.sampling.Condition",
+        "forbid_unconditional_sample_then_label_overwrite": true,
+        "num_rows_formula": "max(0, N_B - N_M)",
+        "require_all_condition_labels": true,
+        "require_exact_returned_count": true,
+        "sample_from_conditions": {
+          "batch_size": 50,
+          "max_tries_per_batch": 100,
+          "output_file_path": null
+        }
+      },
+      "metadata": {
+        "diagnosis": "categorical",
+        "predictors": "numerical"
+      },
+      "parameters": {
+        "batch_size": 50,
+        "discriminator_decay": 1e-06,
+        "discriminator_dim": [
+          256,
+          256
+        ],
+        "discriminator_lr": 0.0002,
+        "discriminator_steps": 1,
+        "embedding_dim": 128,
+        "enable_gpu": false,
+        "enforce_min_max_values": true,
+        "enforce_rounding": false,
+        "epochs": 400,
+        "generator_decay": 1e-06,
+        "generator_dim": [
+          256,
+          256
+        ],
+        "generator_lr": 0.0002,
+        "locales": [
+          "en_US"
+        ],
+        "log_frequency": true,
+        "pac": 10,
+        "verbose": false
+      },
+      "training_frame_columns": "diagnosis_plus_30_predictors_only_no_id",
+      "training_only": true
+    },
+    "smote": {
+      "class": "imblearn.over_sampling.SMOTE",
+      "parameters": {
+        "k_neighbors": 5,
+        "random_state": "$SEED",
+        "sampling_strategy": 1.0
+      },
+      "training_only": true
+    },
+    "smote_tomek": {
+      "class": "imblearn.combine.SMOTETomek",
+      "parameters": {
+        "n_jobs": 1,
+        "random_state": "$SEED",
+        "sampling_strategy": 1.0,
+        "smote": {
+          "class": "imblearn.over_sampling.SMOTE",
+          "parameters": {
+            "k_neighbors": 5,
+            "random_state": "$SEED",
+            "sampling_strategy": 1.0
+          }
+        },
+        "tomek": {
+          "class": "imblearn.under_sampling.TomekLinks",
+          "parameters": {
+            "n_jobs": 1,
+            "sampling_strategy": "all"
+          }
+        }
+      },
+      "semantic_policy": "SMOTE minority to 1:1, then remove both members of each Tomek link",
+      "training_only": true
+    }
+  },
+  "primary_design": {
+    "class_weighting": "forbidden",
+    "classifiers": [
+      "rf",
+      "adaboost",
+      "xgboost",
+      "lightgbm"
+    ],
+    "condition_count": 24,
+    "decision_threshold": 0.5,
+    "methods": [
+      "baseline",
+      "adasyn",
+      "borderline_smote",
+      "smote",
+      "smote_tomek",
+      "ctgan"
+    ],
+    "outer_cv": {
+      "n_repeats": 5,
+      "n_splits": 10,
+      "outer_folds": 50
+    },
+    "positive_class": "M",
+    "preprocessing": {
+      "applies_to_methods": [
+        "baseline",
+        "adasyn",
+        "borderline_smote",
+        "smote",
+        "smote_tomek",
+        "ctgan"
+      ],
+      "fit_scope": "current_outer_training_fold_only",
+      "scaler": "sklearn.preprocessing.StandardScaler",
+      "test_transform": "transform_only_using_training_fitted_scaler"
+    },
+    "primary_metric": "malignant_recall",
+    "replicates": 3
+  },
+  "prohibitions": [
+    "No hyperparameter tuning in the primary experiment.",
+    "No class weighting.",
+    "No resampling or generator fitting outside the current outer training fold.",
+    "No use of held-out test observations for preprocessing, augmentation, model fitting, threshold selection, or rerun decisions.",
+    "No model fitting, resampling execution, CTGAN fit/sample, prediction, metric calculation, or statistical analysis during P2."
+  ],
+  "protocol_version": "1.0",
+  "result_bearing": false,
+  "schema_version": "experiment-config/v1",
+  "software": {
+    "direct_pins": {
+      "ctgan": "0.12.1",
+      "imbalanced-learn": "0.14.2",
+      "lightgbm": "4.6.0",
+      "numpy": "2.0.2",
+      "pandas": "2.2.2",
+      "scikit-learn": "1.9.0",
+      "sdv": "1.36.3",
+      "xgboost": "3.3.0"
+    },
+    "python": "3.12.*",
+    "realized_environment_requirement": "Before the first result-bearing run, write and hash a full pip freeze from the Colab runtime; any direct-pin mismatch is a hard failure."
+  },
+  "status": "FROZEN_CANDIDATE_P2"
+}
