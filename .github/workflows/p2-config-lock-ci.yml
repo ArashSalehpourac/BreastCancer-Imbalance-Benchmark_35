@@ -1,0 +1,62 @@
+name: P2 Configuration Lock CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [p2/pre-experiment-config-lock]
+
+jobs:
+  p2-config-lock:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      P2_CONFIG_LOCK_CI: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install exact P2 scientific pins without experiments
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements/experiment-p2-lock.txt
+          python -m pip install -e . --no-deps
+
+      - name: Print configuration integrity digest
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from bcimbalance.experiment_config import canonical_config_sha256
+          p = Path('config/EXPERIMENT_CONFIG_v1.json')
+          payload = json.loads(p.read_text(encoding='utf-8'))
+          print('P2_CONFIG_STORED_SHA256=' + str(payload['config_sha256']))
+          print('P2_CONFIG_COMPUTED_SHA256=' + canonical_config_sha256(payload))
+          PY
+
+      - name: Run P2 configuration compatibility tests
+        run: python -m unittest tests.test_experiment_config -v
+
+      - name: Run full non-result-bearing repository test suite
+        run: python -m unittest discover -s tests -v
+
+      - name: Confirm P2 scope remains non-result-bearing
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from bcimbalance.experiment_config import load_experiment_config
+
+          config = load_experiment_config(Path('config/EXPERIMENT_CONFIG_v1.json'))
+          assert config['result_bearing'] is False
+          assert config['primary_design']['condition_count'] == 24
+          assert config['primary_design']['replicates'] == 3
+          print('P2_CONFIG_LOCK_GATE=PASS')
+          print('P2_SCOPE_GATE=PASS')
+          print('RESULT_BEARING=false')
+          PY

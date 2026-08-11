@@ -1,0 +1,87 @@
+{
+  "$id": "EXPERIMENT_CONFIG_v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "authorized_base_commit": {
+      "const": "bb37920a134d38edc72c6b7ba2ce97d7c93b96d2"
+    },
+    "classifiers": {
+      "maxProperties": 4,
+      "minProperties": 4,
+      "required": [
+        "rf",
+        "adaboost",
+        "xgboost",
+        "lightgbm"
+      ],
+      "type": "object"
+    },
+    "config_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "config_version": {
+      "const": "1.0"
+    },
+    "determinism": {
+      "type": "object"
+    },
+    "foundation_lock": {
+      "type": "object"
+    },
+    "imbalance_methods": {
+      "maxProperties": 6,
+      "minProperties": 6,
+      "required": [
+        "baseline",
+        "adasyn",
+        "borderline_smote",
+        "smote",
+        "smote_tomek",
+        "ctgan"
+      ],
+      "type": "object"
+    },
+    "primary_design": {
+      "type": "object"
+    },
+    "prohibitions": {
+      "minItems": 5,
+      "type": "array"
+    },
+    "protocol_version": {
+      "const": "1.0"
+    },
+    "result_bearing": {
+      "const": false
+    },
+    "schema_version": {
+      "const": "experiment-config/v1"
+    },
+    "software": {
+      "type": "object"
+    },
+    "status": {
+      "const": "FROZEN_CANDIDATE_P2"
+    }
+  },
+  "required": [
+    "schema_version",
+    "protocol_version",
+    "config_version",
+    "status",
+    "result_bearing",
+    "authorized_base_commit",
+    "foundation_lock",
+    "primary_design",
+    "classifiers",
+    "imbalance_methods",
+    "determinism",
+    "software",
+    "prohibitions",
+    "config_sha256"
+  ],
+  "title": "BreastCancer-Imbalance-Benchmark_35 Experiment Configuration v1",
+  "type": "object"
+}
