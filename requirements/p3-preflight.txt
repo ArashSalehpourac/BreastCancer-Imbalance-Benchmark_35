@@ -1,0 +1,2 @@
+# P3 preflight uses the exact direct scientific pins frozen in P2.
+-r experiment-p2-lock.txt

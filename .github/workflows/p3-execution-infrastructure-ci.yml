@@ -1,0 +1,102 @@
+name: P3 Execution Infrastructure CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [p3/result-bearing-execution-infrastructure]
+
+jobs:
+  p3-preflight-dry-run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      P2_CONFIG_LOCK_CI: "1"
+      P3_EXECUTION_INFRA_CI: "1"
+      EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - name: Checkout exact source revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install exact frozen preflight environment without experiments
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements/p3-preflight.txt
+          python -m pip install -e . --no-deps
+
+      - name: Confirm checkout identity
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          echo "P3_CHECKOUT_IDENTITY=PASS"
+
+      - name: Run dedicated P3 infrastructure tests
+        run: python -m unittest tests.test_execution_harness -v
+
+      - name: Run full repository test suite in exact P3 environment
+        run: python -m unittest discover -s tests -v
+
+      - name: Acquire exact pinned WDBC bytes for preflight only
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import urllib.request
+
+          url = (
+              "https://raw.githubusercontent.com/rzaroz/BreastCancer/"
+              "df2a0919eacd8e98e9242c8f4002a231e6eb57eb/"
+              "MainDatasets/BreastCancerWisconsin%28Diagnostic%29.csv"
+          )
+          request = urllib.request.Request(
+              url,
+              headers={"User-Agent": "BreastCancer-Imbalance-Benchmark_35/P3-preflight"},
+          )
+          with urllib.request.urlopen(request, timeout=60) as response:
+              payload = response.read()
+          if not payload:
+              raise RuntimeError("pinned WDBC download returned zero bytes")
+          Path("/tmp/wdbc.csv").write_bytes(payload)
+          print("P3_DATASET_ACQUISITION=PASS")
+          PY
+
+      - name: Run full non-result-bearing P3 preflight and dry-run
+        run: |
+          mkdir -p artifacts/p3-preflight
+          python scripts/p3_preflight.py \
+            --dataset /tmp/wdbc.csv \
+            --repo-root . \
+            --expected-git-commit "$EXPECTED_HEAD" \
+            --output-dir artifacts/p3-preflight | tee artifacts/p3-preflight.log
+
+      - name: Verify P3 evidence gates and receipts
+        run: |
+          grep -q '^P3_PREFLIGHT_GATE=PASS$' artifacts/p3-preflight.log
+          grep -q '^P3_DRY_RUN_GATE=PASS$' artifacts/p3-preflight.log
+          grep -q '^RESULT_BEARING=false$' artifacts/p3-preflight.log
+          grep -q '^SCIENTIFIC_EXECUTION=0$' artifacts/p3-preflight.log
+          test -s artifacts/p3-preflight/p3_preflight_report.json
+          test -s artifacts/p3-preflight/p3_preflight_report.json.sha256
+          test -s artifacts/p3-preflight/p3_execution_plan.json
+          test -s artifacts/p3-preflight/p3_execution_plan.json.sha256
+          test -s artifacts/p3-preflight/pip_freeze.txt
+          test -s artifacts/p3-preflight/pip_freeze.txt.sha256
+          echo "P3_EVIDENCE_WRITE_GATE=PASS"
+          echo "RESULT_BEARING=false"
+          echo "SCIENTIFIC_EXECUTION=0"
+
+      - name: Upload P3 non-result-bearing preflight evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: p3-execution-infrastructure-preflight
+          path: |
+            artifacts/p3-preflight/
+            artifacts/p3-preflight.log
+          if-no-files-found: error
+          retention-days: 90
