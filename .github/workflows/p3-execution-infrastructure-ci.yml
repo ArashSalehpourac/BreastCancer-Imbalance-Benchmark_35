@@ -26,10 +26,10 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      - name: Install exact P2 scientific pins without experiments
+      - name: Install exact frozen preflight environment without experiments
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements/experiment-p2-lock.txt
+          python -m pip install -r requirements/p3-preflight.txt
           python -m pip install -e . --no-deps
 
       - name: Confirm checkout identity
