@@ -68,6 +68,7 @@ jobs:
 
       - name: Run full non-result-bearing P3 preflight and dry-run
         run: |
+          mkdir -p artifacts/p3-preflight
           python scripts/p3_preflight.py \
             --dataset /tmp/wdbc.csv \
             --repo-root . \
