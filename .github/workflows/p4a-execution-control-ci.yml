@@ -70,35 +70,36 @@ jobs:
 
       - name: Run full non-result-bearing P4A control gate
         run: |
-          rm -rf /tmp/p4a-control
+          rm -rf artifacts/p4a-control artifacts/p4a-control.log
+          mkdir -p artifacts
           python scripts/p4a_control.py \
             --dataset /tmp/wdbc.csv \
             --repo-root . \
             --expected-git-commit "$EXPECTED_HEAD" \
-            --control-root /tmp/p4a-control \
+            --control-root artifacts/p4a-control \
             --authorization-ref "GitHub Issue #11 P4A implementation authorization" \
-            | tee /tmp/p4a-control.log
+            | tee artifacts/p4a-control.log
 
       - name: Verify P4A gates and evidence
         run: |
-          grep -q '^P3_PREFLIGHT_GATE=PASS$' /tmp/p4a-control.log
-          grep -q '^P3_DRY_RUN_GATE=PASS$' /tmp/p4a-control.log
-          grep -q '^P4A_CONTROL_GATE=PASS$' /tmp/p4a-control.log
-          grep -q '^P4B_AUTHORIZED=false$' /tmp/p4a-control.log
-          grep -q '^RESULT_BEARING=false$' /tmp/p4a-control.log
-          grep -q '^SCIENTIFIC_EXECUTION=0$' /tmp/p4a-control.log
-          test -s /tmp/p4a-control/preflight/p3_preflight_report.json
-          test -s /tmp/p4a-control/preflight/p3_preflight_report.json.sha256
-          test -s /tmp/p4a-control/preflight/p3_execution_plan.json
-          test -s /tmp/p4a-control/preflight/p3_execution_plan.json.sha256
-          test -s /tmp/p4a-control/preflight/pip_freeze.txt
-          test -s /tmp/p4a-control/preflight/pip_freeze.txt.sha256
-          test -s /tmp/p4a-control/manifests/p4a_control_manifest.json
-          test -s /tmp/p4a-control/manifests/p4a_control_manifest.json.sha256
-          test -s /tmp/p4a-control/manifests/p4a_path_policy_report.json
-          test -s /tmp/p4a-control/manifests/p4a_path_policy_report.json.sha256
-          test -s /tmp/p4a-control/receipts/p4a_receipt_index.json
-          test -s /tmp/p4a-control/receipts/p4a_receipt_index.json.sha256
+          grep -q '^P3_PREFLIGHT_GATE=PASS$' artifacts/p4a-control.log
+          grep -q '^P3_DRY_RUN_GATE=PASS$' artifacts/p4a-control.log
+          grep -q '^P4A_CONTROL_GATE=PASS$' artifacts/p4a-control.log
+          grep -q '^P4B_AUTHORIZED=false$' artifacts/p4a-control.log
+          grep -q '^RESULT_BEARING=false$' artifacts/p4a-control.log
+          grep -q '^SCIENTIFIC_EXECUTION=0$' artifacts/p4a-control.log
+          test -s artifacts/p4a-control/preflight/p3_preflight_report.json
+          test -s artifacts/p4a-control/preflight/p3_preflight_report.json.sha256
+          test -s artifacts/p4a-control/preflight/p3_execution_plan.json
+          test -s artifacts/p4a-control/preflight/p3_execution_plan.json.sha256
+          test -s artifacts/p4a-control/preflight/pip_freeze.txt
+          test -s artifacts/p4a-control/preflight/pip_freeze.txt.sha256
+          test -s artifacts/p4a-control/manifests/p4a_control_manifest.json
+          test -s artifacts/p4a-control/manifests/p4a_control_manifest.json.sha256
+          test -s artifacts/p4a-control/manifests/p4a_path_policy_report.json
+          test -s artifacts/p4a-control/manifests/p4a_path_policy_report.json.sha256
+          test -s artifacts/p4a-control/receipts/p4a_receipt_index.json
+          test -s artifacts/p4a-control/receipts/p4a_receipt_index.json.sha256
           echo "P4A_EVIDENCE_WRITE_GATE=PASS"
           echo "P4B_AUTHORIZED=false"
           echo "RESULT_BEARING=false"
@@ -109,7 +110,7 @@ jobs:
         with:
           name: p4a-execution-control
           path: |
-            /tmp/p4a-control/
-            /tmp/p4a-control.log
+            artifacts/p4a-control/
+            artifacts/p4a-control.log
           if-no-files-found: error
           retention-days: 90
