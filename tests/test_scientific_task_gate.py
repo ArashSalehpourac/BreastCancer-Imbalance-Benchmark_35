@@ -12,6 +12,7 @@ from bcimbalance.scientific_task import run_authorized_task
 
 ROOT = Path(__file__).resolve().parents[1]
 POLICY = ROOT / "config" / "P4B_EXECUTION_POLICY_v1.json"
+SCRIPT = ROOT / "scripts" / "p4b_execute.py"
 
 
 class P4BScientificGateTests(unittest.TestCase):
@@ -52,6 +53,26 @@ class P4BScientificGateTests(unittest.TestCase):
         scientific_position = source.index("_execute_scientific_task(")
         self.assertLess(authorization_position, path_creation_position)
         self.assertLess(authorization_position, scientific_position)
+
+    def test_controller_dispatches_isolated_worker_with_preimport_environment(self) -> None:
+        text = SCRIPT.read_text(encoding="utf-8")
+        self.assertIn('"--worker-execute-one"', text)
+        self.assertIn('"P4B_AUTHORIZED_WORKER": "1"', text)
+        self.assertIn('"PYTHONHASHSEED": str(seed)', text)
+        self.assertIn('"MKL_NUM_THREADS": "1"', text)
+        self.assertIn('"OPENBLAS_NUM_THREADS": "1"', text)
+        self.assertIn("Scientific modules are deliberately imported only after", text)
+        self.assertIn("immutable P4B first-run root already exists", text)
+
+    def test_worker_checks_environment_before_scientific_import_textually(self) -> None:
+        text = SCRIPT.read_text(encoding="utf-8")
+        worker_start = text.index("def _worker_execute_one")
+        worker = text[worker_start:]
+        env_check = worker.index('required_env = {')
+        scientific_import = worker.index("from bcimbalance.scientific_task import run_authorized_task")
+        self.assertLess(env_check, scientific_import)
+        self.assertIn('os.environ.get("P4B_AUTHORIZED_WORKER") != "1"', worker[:scientific_import])
+        self.assertIn("Path(args.run_root).exists()", worker[:scientific_import])
 
     def test_validation_modules_contain_no_scientific_calls(self) -> None:
         forbidden = {
