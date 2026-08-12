@@ -1,0 +1,100 @@
+{
+  "$id": "https://example.invalid/bcimbalance/P4B_AUTHORIZATION_v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "authorization_ref": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "authorized_utc": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "dataset_sha256": {
+      "const": "27f219231dbb30eecbfc1361407ed641ea01be43316e2c707a1baf82c9795e23"
+    },
+    "exact_git_commit": {
+      "pattern": "^[0-9a-f]{40}$",
+      "type": "string"
+    },
+    "execution_plan_sha256": {
+      "const": "3696604d936e103426fd0527cf8a37b1ec619043fcb32121cb55fe119b94c137"
+    },
+    "foundation_sha256": {
+      "const": "49291df347b8aa8453a68cf06296642f3939bfc3fe51ce452d3620d9c228e030"
+    },
+    "max_tasks": {
+      "const": 1
+    },
+    "p2_config_sha256": {
+      "const": "71e82edad62dcf06382cf85dcd87e642049e80668eaa7dbd9913d7a5a5bb7dc9"
+    },
+    "p3_result_schema_sha256": {
+      "const": "7819dd71c49d3c5c686ca76079a92f0b5399596d0de71d2964eca8ece8af4686"
+    },
+    "p4a_policy_sha256": {
+      "const": "af3212b00c87afbd83032de5a86b1bb933f840a7e6b675e752278e55c2a80c0b"
+    },
+    "p4b_policy_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "pip_freeze_sha256": {
+      "const": "9bdf50ed4d756c753579eb0e4ced6031299ffd6dab1d885f03dfdf58e9978a4e"
+    },
+    "result_bearing_authorized": {
+      "const": true
+    },
+    "run_id": {
+      "pattern": "^P4_RUN_[0-9]{8}T[0-9]{6}Z_[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "run_root": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "p4b-authorization/v1"
+    },
+    "seed_registry_sha256": {
+      "const": "985f5614275ef880213bf775cded0b8e3867fb011f43df817b48d94bb5af73e2"
+    },
+    "split_sha256": {
+      "const": "00114e7735fc4eb012ecf248010b18b441cce4a74e0d1540115bbaff543d764a"
+    },
+    "task_ids": {
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 1,
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    }
+  },
+  "required": [
+    "schema_version",
+    "result_bearing_authorized",
+    "exact_git_commit",
+    "task_ids",
+    "max_tasks",
+    "run_id",
+    "run_root",
+    "authorization_ref",
+    "authorized_utc",
+    "p4b_policy_sha256",
+    "dataset_sha256",
+    "foundation_sha256",
+    "split_sha256",
+    "seed_registry_sha256",
+    "p2_config_sha256",
+    "p3_result_schema_sha256",
+    "p4a_policy_sha256",
+    "pip_freeze_sha256",
+    "execution_plan_sha256"
+  ],
+  "title": "P4B one-task result-bearing authorization",
+  "type": "object"
+}

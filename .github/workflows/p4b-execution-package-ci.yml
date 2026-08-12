@@ -1,0 +1,109 @@
+name: P4B Execution Package CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [p4b/result-bearing-execution-package]
+
+jobs:
+  p4b-package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      P2_CONFIG_LOCK_CI: "1"
+      P3_EXECUTION_INFRA_CI: "1"
+      P4A_EXECUTION_CONTROL_CI: "1"
+      P4B_EXECUTION_PACKAGE_CI: "1"
+      EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+
+    steps:
+      - name: Checkout exact review revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install exact frozen scientific environment without execution
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements/p3-preflight.txt
+          python -m pip install -e . --no-deps
+
+      - name: Confirm exact checkout
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          echo "P4B_CHECKOUT_IDENTITY=PASS"
+
+      - name: Run dedicated P4B authorization tests
+        run: python -m unittest tests.test_p4b_authorization -v
+
+      - name: Run dedicated P4B scientific gate tests
+        run: python -m unittest tests.test_scientific_task_gate -v
+
+      - name: Run validation-only P4B package gate
+        run: |
+          python scripts/p4b_execute.py \
+            --validate-only \
+            --repo-root . \
+            --expected-git-commit "$EXPECTED_HEAD" \
+            --allow-review-head \
+            | tee p4b-package-validation.log
+
+      - name: Assert non-result-bearing validation gates
+        run: |
+          grep -q '^P4B_PACKAGE_VALIDATION=PASS$' p4b-package-validation.log
+          grep -q '^P4B_FIRST_RUN_MAX_TASKS=1$' p4b-package-validation.log
+          grep -q '^P4B_AUTHORIZED=false$' p4b-package-validation.log
+          grep -q '^RESULT_BEARING=false$' p4b-package-validation.log
+          grep -q '^SCIENTIFIC_EXECUTION=0$' p4b-package-validation.log
+          test ! -e "/content/drive/MyDrive/35/01_Experiment_Evidence/P4_Result_Bearing_Runs"
+          echo "P4B_NON_RESULT_BEARING_GATE=PASS"
+
+      - name: Static validation-path guard
+        run: |
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+
+          forbidden = {
+              "fit", "fit_resample", "sample", "sample_from_conditions",
+              "predict", "predict_proba", "score",
+          }
+          for path in (
+              Path("src/bcimbalance/p4b_authorization.py"),
+              Path("scripts/p4b_execute.py"),
+          ):
+              tree = ast.parse(path.read_text(encoding="utf-8"))
+              observed = set()
+              for node in ast.walk(tree):
+                  if isinstance(node, ast.Call):
+                      func = node.func
+                      if isinstance(func, ast.Attribute):
+                          observed.add(func.attr)
+                      elif isinstance(func, ast.Name):
+                          observed.add(func.id)
+              overlap = forbidden & observed
+              if overlap:
+                  raise SystemExit(f"forbidden validation-path calls in {path}: {sorted(overlap)}")
+          print("P4B_VALIDATION_STATIC_GUARD=PASS")
+          print("P4B_AUTHORIZED=false")
+          print("RESULT_BEARING=false")
+          print("SCIENTIFIC_EXECUTION=0")
+          PY
+
+      - name: Run full repository tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Upload non-result-bearing package validation evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: p4b-execution-package-validation
+          path: p4b-package-validation.log
+          if-no-files-found: error
+          retention-days: 90

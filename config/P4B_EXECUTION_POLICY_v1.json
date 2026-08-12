@@ -1,0 +1,68 @@
+{
+  "authorization": {
+    "authorization_record_sha256_required": true,
+    "authorization_reference_required": true,
+    "authorization_timestamp_required": true,
+    "exact_git_commit_required": true,
+    "exact_immutable_run_root_required": true,
+    "exact_task_ids_required": true,
+    "first_run_max_tasks": 1,
+    "schema_version": "p4b-authorization/v1"
+  },
+  "authorized_base": "ffd7a29c8c05d17ac4e20dae9db75492d1ed1dff",
+  "checkpoint_policy": {
+    "COMPLETE": ".complete.json",
+    "INCOMPLETE": ".inprogress.json",
+    "PENDING": "no marker",
+    "both_markers": "HARD_FAIL"
+  },
+  "design": {
+    "outer_folds": 50,
+    "planned_tasks": 3600,
+    "positive_class": "M",
+    "primary_conditions": 24,
+    "replicates": 3,
+    "threshold": 0.5
+  },
+  "frozen_identities": {
+    "accepted_p4a_pip_freeze_sha256": "9bdf50ed4d756c753579eb0e4ced6031299ffd6dab1d885f03dfdf58e9978a4e",
+    "dataset_sha256": "27f219231dbb30eecbfc1361407ed641ea01be43316e2c707a1baf82c9795e23",
+    "execution_plan_sha256": "3696604d936e103426fd0527cf8a37b1ec619043fcb32121cb55fe119b94c137",
+    "foundation_sha256": "49291df347b8aa8453a68cf06296642f3939bfc3fe51ce452d3620d9c228e030",
+    "p2_config_sha256": "71e82edad62dcf06382cf85dcd87e642049e80668eaa7dbd9913d7a5a5bb7dc9",
+    "p3_result_schema_sha256": "7819dd71c49d3c5c686ca76079a92f0b5399596d0de71d2964eca8ece8af4686",
+    "p4a_policy_sha256": "af3212b00c87afbd83032de5a86b1bb933f840a7e6b675e752278e55c2a80c0b",
+    "protocol_commit": "00765102707ca0cce5b169af2b6436a91c643a87",
+    "seed_registry_sha256": "985f5614275ef880213bf775cded0b8e3867fb011f43df817b48d94bb5af73e2",
+    "split_sha256": "00114e7735fc4eb012ecf248010b18b441cce4a74e0d1540115bbaff543d764a"
+  },
+  "future_result_bearing_root": "/content/drive/MyDrive/35/01_Experiment_Evidence/P4_Result_Bearing_Runs",
+  "implementation_state": "DISABLED_PENDING_EXACT_AUTHORIZATION",
+  "issue_number": 13,
+  "parent_control_issue": 11,
+  "protocol_version": "1.0",
+  "required_subdirectories": [
+    "preflight",
+    "manifests",
+    "splits",
+    "raw",
+    "checkpoints",
+    "logs",
+    "receipts"
+  ],
+  "result_bearing_authorized": false,
+  "run_id_pattern": "P4_RUN_YYYYMMDDTHHMMSSZ_<12-char-exact-git-sha>",
+  "schema_version": "p4b-execution-policy/v1",
+  "task_record_mapping": {
+    "source_prefix": "evidence/conditions/",
+    "target_prefix": "raw/conditions/"
+  },
+  "validation_only": true,
+  "validation_prohibitions": [
+    "No WDBC model fitting in implementation/CI validation.",
+    "No WDBC resampling in implementation/CI validation.",
+    "No CTGAN fit/sample in implementation/CI validation.",
+    "No WDBC prediction or scientific metric calculation in implementation/CI validation.",
+    "No P4_Result_Bearing_Runs run directory may be created in validation-only mode."
+  ]
+}
