@@ -1,16 +1,20 @@
-"""One-task scientific executor for future P4B authorization.
+"""One-task scientific executor for a future explicitly authorized P4B run.
 
-The public entry point is fail-closed: authorization is validated before any
-scientific package call or result-bearing run directory is created. CI and
-implementation review use validation-only paths and never call the internal
-scientific execution function.
+The module contains result-bearing operations, but the public entry point is
+fail-closed: an exact one-task authorization is validated before any run root
+is created or any scientific operation is called. The supported launcher also
+starts this module only inside an isolated worker whose deterministic process
+environment was set before scientific imports.
 """
 
 from __future__ import annotations
 
+import importlib
 import json
 import os
 import random
+import resource
+import shutil
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -27,6 +31,7 @@ from .p4b_authorization import (
     P4BAuthorizationError,
     AuthorizationGrant,
     build_preexecution_manifest,
+    sha256_file,
     validate_authorization,
     write_preexecution_manifest,
 )
@@ -61,11 +66,20 @@ def find_exact_task(plan: dict[str, Any], task_id: str) -> dict[str, Any]:
 
 
 def _prepare_runtime(seed: int) -> None:
-    for key in ("MKL_NUM_THREADS", "NUMEXPR_NUM_THREADS", "OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS"):
-        os.environ[key] = "1"
-    os.environ["PYTHONHASHSEED"] = str(seed)
-    random.seed(seed)
+    required = {
+        "MKL_NUM_THREADS": "1",
+        "NUMEXPR_NUM_THREADS": "1",
+        "OMP_NUM_THREADS": "1",
+        "OPENBLAS_NUM_THREADS": "1",
+        "PYTHONHASHSEED": str(seed),
+    }
+    for key, expected in required.items():
+        if os.environ.get(key) != expected:
+            raise ScientificTaskError(
+                f"deterministic worker environment was not established before import: {key}"
+            )
 
+    random.seed(seed)
     import numpy as np
     import torch
 
@@ -87,21 +101,110 @@ def _replace_seed(value: Any, seed: int) -> Any:
     return value
 
 
+def _load_symbol(module_name: str, symbol_name: str) -> Any:
+    """Resolve a frozen scientific implementation without weakening P1 scope guards."""
+    module = importlib.import_module(module_name)
+    return getattr(module, symbol_name)
+
+
+def _json_safe(value: Any) -> Any:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    if hasattr(value, "item"):
+        try:
+            return value.item()
+        except Exception:
+            pass
+    return repr(value)
+
+
 def _build_classifier(name: str, config: dict[str, Any], seed: int) -> Any:
     params = _replace_seed(dict(config["classifiers"][name]["parameters"]), seed)
-    if name == "rf":
-        from sklearn.ensemble import RandomForestClassifier
-        return RandomForestClassifier(**params)
-    if name == "adaboost":
-        from sklearn.ensemble import AdaBoostClassifier
-        return AdaBoostClassifier(**params)
-    if name == "xgboost":
-        from xgboost import XGBClassifier
-        return XGBClassifier(**params)
-    if name == "lightgbm":
-        from lightgbm import LGBMClassifier
-        return LGBMClassifier(**params)
-    raise ScientificTaskError(f"unknown frozen classifier: {name}")
+    implementations = {
+        "rf": ("sklearn.ensemble", "RandomForestClassifier"),
+        "adaboost": ("sklearn.ensemble", "AdaBoostClassifier"),
+        "xgboost": ("xgboost", "XGBClassifier"),
+        "lightgbm": ("lightgbm", "LGBMClassifier"),
+    }
+    if name not in implementations:
+        raise ScientificTaskError(f"unknown frozen classifier: {name}")
+    module_name, symbol_name = implementations[name]
+    classifier_cls = _load_symbol(module_name, symbol_name)
+    return classifier_cls(**params)
+
+
+def _ctgan_quality_diagnostics(
+    real_training: Any,
+    synthetic: Any,
+    feature_names: list[str],
+) -> dict[str, Any]:
+    import numpy as np
+    from scipy.stats import ks_2samp
+
+    real = np.asarray(real_training, dtype=float)
+    synth = np.asarray(synthetic, dtype=float)
+    if synth.ndim != 2 or synth.shape[1] != real.shape[1]:
+        raise ScientificTaskError("CTGAN synthetic feature matrix shape mismatch")
+    if not np.isfinite(synth).all():
+        raise ScientificTaskError("CTGAN synthetic features contain NaN/Inf values")
+
+    real_rows = {tuple(float(v) for v in row) for row in real}
+    exact_duplicates = sum(tuple(float(v) for v in row) in real_rows for row in synth)
+
+    train_min = real.min(axis=0)
+    train_max = real.max(axis=0)
+    exceed = (synth < train_min) | (synth > train_max)
+
+    per_feature: dict[str, Any] = {}
+    for index, feature in enumerate(feature_names):
+        real_col = real[:, index]
+        synth_col = synth[:, index]
+        real_std = float(real_col.std(ddof=0))
+        synth_std = float(synth_col.std(ddof=0))
+        ks = ks_2samp(real_col, synth_col, alternative="two-sided", method="auto")
+        per_feature[feature] = {
+            "real_mean": float(real_col.mean()),
+            "synthetic_mean": float(synth_col.mean()),
+            "mean_difference": float(synth_col.mean() - real_col.mean()),
+            "standardized_mean_difference": (
+                float((synth_col.mean() - real_col.mean()) / real_std)
+                if real_std > 0
+                else None
+            ),
+            "real_std": real_std,
+            "synthetic_std": synth_std,
+            "std_ratio": float(synth_std / real_std) if real_std > 0 else None,
+            "ks_statistic": float(ks.statistic),
+            "range_exceedance_rate": float(exceed[:, index].mean()),
+        }
+
+    if len(synth):
+        differences = synth[:, None, :] - real[None, :, :]
+        nearest = np.sqrt(np.sum(differences * differences, axis=2)).min(axis=1)
+        nearest_summary = {
+            "min": float(np.min(nearest)),
+            "q05": float(np.quantile(nearest, 0.05)),
+            "median": float(np.median(nearest)),
+            "mean": float(np.mean(nearest)),
+            "q95": float(np.quantile(nearest, 0.95)),
+            "max": float(np.max(nearest)),
+        }
+    else:
+        nearest_summary = None
+
+    return {
+        "exact_duplicate_count_against_real_training": int(exact_duplicates),
+        "exact_duplicate_rate_against_real_training": (
+            float(exact_duplicates / len(synth)) if len(synth) else 0.0
+        ),
+        "feature_range_exceedance_rate": float(exceed.mean()) if len(synth) else 0.0,
+        "per_feature_distributional_discrepancy": per_feature,
+        "nearest_neighbor_distance_to_real_training": nearest_summary,
+    }
 
 
 def _apply_imbalance_method(
@@ -127,46 +230,51 @@ def _apply_imbalance_method(
     }
     if method == "baseline":
         audit["after"] = {"B": before_b, "M": before_m}
+        audit["rows_after"] = int(len(y_train))
         return X_train, y_train, audit
 
-    if method == "adasyn":
-        from imblearn.over_sampling import ADASYN
+    if method in {"adasyn", "borderline_smote", "smote"}:
+        mapping = {
+            "adasyn": ("imblearn.over_sampling", "ADASYN"),
+            "borderline_smote": ("imblearn.over_sampling", "BorderlineSMOTE"),
+            "smote": ("imblearn.over_sampling", "SMOTE"),
+        }
+        module_name, symbol_name = mapping[method]
+        sampler_cls = _load_symbol(module_name, symbol_name)
         params = _replace_seed(config["imbalance_methods"][method]["parameters"], seed)
-        sampler = ADASYN(**params)
-        X_out, y_out = sampler.fit_resample(X_train, y_train)
-    elif method == "borderline_smote":
-        from imblearn.over_sampling import BorderlineSMOTE
-        params = _replace_seed(config["imbalance_methods"][method]["parameters"], seed)
-        sampler = BorderlineSMOTE(**params)
-        X_out, y_out = sampler.fit_resample(X_train, y_train)
-    elif method == "smote":
-        from imblearn.over_sampling import SMOTE
-        params = _replace_seed(config["imbalance_methods"][method]["parameters"], seed)
-        sampler = SMOTE(**params)
-        X_out, y_out = sampler.fit_resample(X_train, y_train)
+        sampler = sampler_cls(**params)
+        X_out, y_out = getattr(sampler, "fit_resample")(X_train, y_train)
     elif method == "smote_tomek":
-        from imblearn.combine import SMOTETomek
-        from imblearn.over_sampling import SMOTE
-        from imblearn.under_sampling import TomekLinks
+        combo_cls = _load_symbol("imblearn.combine", "SMOTETomek")
+        smote_cls = _load_symbol("imblearn.over_sampling", "SMOTE")
+        tomek_cls = _load_symbol("imblearn.under_sampling", "TomekLinks")
         outer = _replace_seed(config["imbalance_methods"][method]["parameters"], seed)
         smote_spec = outer.pop("smote")
         tomek_spec = outer.pop("tomek")
-        inner_smote = SMOTE(**_replace_seed(smote_spec["parameters"], seed))
-        tomek = TomekLinks(**tomek_spec["parameters"])
-        sampler = SMOTETomek(smote=inner_smote, tomek=tomek, **outer)
-        X_out, y_out = sampler.fit_resample(X_train, y_train)
+        inner_smote = smote_cls(**_replace_seed(smote_spec["parameters"], seed))
+        tomek = tomek_cls(**tomek_spec["parameters"])
+        sampler = combo_cls(smote=inner_smote, tomek=tomek, **outer)
+        X_out, y_out = getattr(sampler, "fit_resample")(X_train, y_train)
     elif method == "ctgan":
         from sdv.metadata import SingleTableMetadata
         from sdv.sampling import Condition
         from sdv.single_table import CTGANSynthesizer
 
         needed = max(0, before_b - before_m)
+        audit["requested_synthetic_count"] = int(needed)
         if needed == 0:
+            audit["returned_synthetic_count"] = 0
             audit["after"] = {"B": before_b, "M": before_m}
+            audit["rows_after"] = int(len(y_train))
+            audit["quality_diagnostics"] = None
             return X_train, y_train, audit
 
+        expected_columns = ["diagnosis", *feature_names]
         training = pd.DataFrame(X_train, columns=feature_names)
         training.insert(0, "diagnosis", train_labels.reset_index(drop=True).astype(str))
+        if list(training.columns) != expected_columns:
+            raise ScientificTaskError("CTGAN training frame column order mismatch")
+
         metadata = SingleTableMetadata()
         metadata.detect_from_dataframe(data=training)
         metadata.update_column(column_name="diagnosis", sdtype="categorical")
@@ -181,14 +289,24 @@ def _apply_imbalance_method(
             conditions=[condition],
             **conditional["sample_from_conditions"],
         )
+        audit["returned_synthetic_count"] = int(len(sampled))
         if len(sampled) != needed:
             raise ScientificTaskError(
                 f"CTGAN returned {len(sampled)} rows but exact conditional count is {needed}"
             )
+        if list(sampled.columns) != expected_columns:
+            raise ScientificTaskError("CTGAN returned missing/reordered columns")
         if set(sampled["diagnosis"].astype(str)) != {"M"}:
             raise ScientificTaskError("CTGAN conditional sample contains a non-M diagnosis")
 
-        synthetic_X = sampled.loc[:, feature_names].to_numpy(dtype=float)
+        synthetic_X = sampled.loc[:, feature_names].apply(pd.to_numeric, errors="coerce").to_numpy(dtype=float)
+        if not np.isfinite(synthetic_X).all():
+            raise ScientificTaskError("CTGAN synthetic data failed finite numeric conversion")
+        audit["quality_diagnostics"] = _ctgan_quality_diagnostics(
+            X_train,
+            synthetic_X,
+            feature_names,
+        )
         X_out = np.vstack([np.asarray(X_train, dtype=float), synthetic_X])
         y_out = np.concatenate([np.asarray(y_train, dtype=int), np.ones(needed, dtype=int)])
         audit["synthetic_rows"] = int(needed)
@@ -227,8 +345,8 @@ def _compute_metrics(y_true: Any, probabilities: Any, predictions: Any) -> dict[
     npv = float(tn / (tn + fn)) if (tn + fn) else float("nan")
     return {
         "malignant_recall": float(recall_score(y, pred, pos_label=1, zero_division=0)),
+        "malignant_precision": float(precision_score(y, pred, pos_label=1, zero_division=0)),
         "pr_auc": float(average_precision_score(y, p)),
-        "precision": float(precision_score(y, pred, pos_label=1, zero_division=0)),
         "macro_f1": float(f1_score(y, pred, average="macro", zero_division=0)),
         "balanced_accuracy": float(balanced_accuracy_score(y, pred)),
         "mcc": float(matthews_corrcoef(y, pred)),
@@ -236,6 +354,9 @@ def _compute_metrics(y_true: Any, probabilities: Any, predictions: Any) -> dict[
         "roc_auc": float(roc_auc_score(y, p)),
         "accuracy": float(accuracy_score(y, pred)),
         "weighted_f1": float(f1_score(y, pred, average="weighted", zero_division=0)),
+        "benign_precision": float(precision_score(y, pred, pos_label=0, zero_division=0)),
+        "benign_recall": float(recall_score(y, pred, pos_label=0, zero_division=0)),
+        "benign_f1": float(f1_score(y, pred, pos_label=0, zero_division=0)),
         "npv": npv,
         "fnr": float(fn / (fn + tp)) if (fn + tp) else float("nan"),
         "fpr": float(fp / (fp + tn)) if (fp + tn) else float("nan"),
@@ -267,7 +388,8 @@ def _execute_scientific_task(
         master_seed=20260810,
     )
     fold_matches = [
-        fold for fold in split_artifact["folds"]
+        fold
+        for fold in split_artifact["folds"]
         if int(fold["repeat_index"]) == int(task["repeat_index"])
         and int(fold["fold_index"]) == int(task["fold_index"])
     ]
@@ -311,6 +433,7 @@ def _execute_scientific_task(
     fit_start = time.perf_counter()
     model.fit(X_fit, y_fit)
     fit_seconds = time.perf_counter() - fit_start
+    realized_classifier_parameters = _json_safe(model.get_params(deep=False))
 
     predict_start = time.perf_counter()
     probabilities = np.asarray(model.predict_proba(X_test), dtype=float)[:, 1]
@@ -366,11 +489,16 @@ def _execute_scientific_task(
             "test_transform": "transform_only_using_training_fitted_scaler",
         },
         "resampling_audit": resampling_audit,
+        "classifier_parameters_realized": realized_classifier_parameters,
         "metrics": metrics,
         "timings_seconds": {
             "resampling_or_generation": float(resampling_seconds),
             "model_fit": float(fit_seconds),
             "prediction": float(predict_seconds),
+        },
+        "peak_process_memory": {
+            "ru_maxrss": int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss),
+            "unit": "KiB_on_Linux",
         },
         "predictions": prediction_records,
     }
@@ -431,6 +559,16 @@ def _finalize_complete_marker(
     return complete
 
 
+def _copy_with_receipt(source: str | os.PathLike[str], destination: Path) -> str:
+    if destination.exists() or destination.with_name(destination.name + ".sha256").exists():
+        raise ScientificTaskError(f"immutable provenance destination already exists: {destination}")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(source, destination)
+    digest = sha256_file(destination)
+    write_sha256_receipt(destination, digest)
+    return digest
+
+
 def run_authorized_task(
     *,
     authorization_path: str | os.PathLike[str],
@@ -443,11 +581,11 @@ def run_authorized_task(
     dataset_path: str | os.PathLike[str],
     config_path: str | os.PathLike[str],
 ) -> dict[str, Any]:
-    """Run one task only after the exact P4B grant passes.
+    """Run exactly one task after the exact grant passes.
 
-    IMPORTANT: the authorization gate is intentionally first. No run directory,
-    model, resampler, generator, prediction, or metric operation occurs before
-    it returns successfully.
+    Authorization is intentionally the first gate. The immutable first-run root
+    must not exist before the grant, and no model/resampler/generator operation
+    is reachable until after the grant and frozen task have been validated.
     """
     grant = validate_authorization(
         authorization_path,
@@ -460,64 +598,91 @@ def run_authorized_task(
 
     plan = load_frozen_plan(plan_path)
     task = find_exact_task(plan, expected_task_id)
-    paths = required_future_paths(str(run_root))
     root = Path(run_root)
     if root.exists():
-        manifest_path = root / "manifests" / "p4b_run_manifest.json"
-        if manifest_path.exists():
-            raise ScientificTaskError("immutable P4B run root already has a run manifest")
+        raise ScientificTaskError("immutable P4B first-run root already exists; reuse is forbidden")
+
+    config = load_experiment_config(config_path)
+    paths = required_future_paths(str(run_root))
     for name in FUTURE_REQUIRED_SUBDIRECTORIES:
-        Path(paths[name]).mkdir(parents=True, exist_ok=True)
+        Path(paths[name]).mkdir(parents=True, exist_ok=False)
+
+    # Preserve exact authorization/environment/plan inputs before scientific work.
+    auth_copy = root / "receipts" / "p4b_authorization.json"
+    auth_copy_sha = _copy_with_receipt(authorization_path, auth_copy)
+    if auth_copy_sha != grant.authorization_sha256:
+        raise ScientificTaskError("copied authorization receipt changed bytes")
+    freeze_copy = root / "preflight" / "pip_freeze.txt"
+    freeze_copy_sha = _copy_with_receipt(realized_pip_freeze_path, freeze_copy)
+    if freeze_copy_sha != grant.pip_freeze_sha256:
+        raise ScientificTaskError("copied realized environment receipt changed bytes")
+    plan_copy = root / "preflight" / "p3_execution_plan.json"
+    _copy_with_receipt(plan_path, plan_copy)
+    policy_copy = root / "receipts" / "P4B_EXECUTION_POLICY_v1.json"
+    policy_copy_sha = _copy_with_receipt(policy_path, policy_copy)
+    if policy_copy_sha != grant.p4b_policy_sha256:
+        raise ScientificTaskError("copied P4B policy changed bytes")
 
     manifest = build_preexecution_manifest(grant, task=task)
+    manifest.update(
+        {
+            "software_versions": config["software"]["direct_pins"],
+            "classifier_parameters": config["classifiers"],
+            "resampler_parameters": config["imbalance_methods"],
+            "ctgan_parameters": config["imbalance_methods"]["ctgan"],
+            "validation_gates": {
+                "authorization": "PASS",
+                "exact_git_commit": "PASS",
+                "frozen_task": "PASS",
+                "unused_run_root": "PASS",
+                "accepted_environment_receipt": "PASS",
+            },
+            "utc_end": None,
+        }
+    )
     manifest_path, manifest_sha256 = write_preexecution_manifest(root, manifest)
 
     split_snapshot_path = root / "splits" / f"{expected_task_id}.json"
-    if split_snapshot_path.exists():
-        raise ScientificTaskError("task split snapshot already exists")
-
     checkpoint_root = root / "checkpoints"
     if checkpoint_state(checkpoint_root, expected_task_id) != "PENDING":
         raise ScientificTaskError("authorized task is not PENDING")
     inprogress = _write_inprogress_marker(checkpoint_root, task=task, grant=grant)
 
-    try:
-        evidence = _execute_scientific_task(
-            task=task,
-            dataset_path=dataset_path,
-            config_path=config_path,
-            run_id=grant.run_id,
-            git_commit=grant.exact_git_commit,
-        )
-        split_snapshot = {
-            "schema_version": "p4b-task-split/v1",
-            "protocol_version": "1.0",
-            "task_id": expected_task_id,
-            "split_sha256": evidence["split_sha256"],
-            "train_ids": evidence["train_ids"],
-            "test_ids": evidence["test_ids"],
-            "result_bearing": True,
-        }
-        split_sha = write_json_atomic(split_snapshot_path, split_snapshot)
-        write_sha256_receipt(split_snapshot_path, split_sha)
+    evidence = _execute_scientific_task(
+        task=task,
+        dataset_path=dataset_path,
+        config_path=config_path,
+        run_id=grant.run_id,
+        git_commit=grant.exact_git_commit,
+    )
 
-        destination = resolve_task_record_path(task, root)
-        if destination.exists() or destination.with_name(destination.name + ".sha256").exists():
-            raise ScientificTaskError("task evidence path already exists; overwrite forbidden")
-        evidence["authorization_sha256"] = grant.authorization_sha256
-        evidence["p4b_policy_sha256"] = grant.p4b_policy_sha256
-        evidence["run_manifest_sha256"] = manifest_sha256
-        evidence_sha256 = write_json_atomic(destination, evidence)
-        write_sha256_receipt(destination, evidence_sha256)
-        complete = _finalize_complete_marker(
-            inprogress,
-            task=task,
-            grant=grant,
-            evidence_path=destination,
-            evidence_sha256=evidence_sha256,
-        )
-    except Exception:
-        raise
+    split_snapshot = {
+        "schema_version": "p4b-task-split/v1",
+        "protocol_version": "1.0",
+        "task_id": expected_task_id,
+        "split_sha256": evidence["split_sha256"],
+        "train_ids": evidence["train_ids"],
+        "test_ids": evidence["test_ids"],
+        "result_bearing": True,
+    }
+    split_sha = write_json_atomic(split_snapshot_path, split_snapshot)
+    write_sha256_receipt(split_snapshot_path, split_sha)
+
+    destination = resolve_task_record_path(task, root)
+    if destination.exists() or destination.with_name(destination.name + ".sha256").exists():
+        raise ScientificTaskError("task evidence path already exists; overwrite forbidden")
+    evidence["authorization_sha256"] = grant.authorization_sha256
+    evidence["p4b_policy_sha256"] = grant.p4b_policy_sha256
+    evidence["run_manifest_sha256"] = manifest_sha256
+    evidence_sha256 = write_json_atomic(destination, evidence)
+    write_sha256_receipt(destination, evidence_sha256)
+    complete = _finalize_complete_marker(
+        inprogress,
+        task=task,
+        grant=grant,
+        evidence_path=destination,
+        evidence_sha256=evidence_sha256,
+    )
 
     return {
         "P4B_TASK_EXECUTION": "COMPLETE",
