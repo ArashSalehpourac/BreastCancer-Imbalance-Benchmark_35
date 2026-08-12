@@ -1,0 +1,115 @@
+name: P4A Execution Control CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [p4/first-result-bearing-execution-control]
+
+jobs:
+  p4a-control:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      P2_CONFIG_LOCK_CI: "1"
+      P3_EXECUTION_INFRA_CI: "1"
+      P4A_EXECUTION_CONTROL_CI: "1"
+      EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+
+    steps:
+      - name: Checkout exact source revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install exact frozen control environment
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements/p3-preflight.txt
+          python -m pip install -e . --no-deps
+
+      - name: Confirm checkout identity
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          echo "P4A_CHECKOUT_IDENTITY=PASS"
+
+      - name: Run dedicated P4A control tests
+        run: python -m unittest tests.test_p4_control -v
+
+      - name: Run full repository test suite
+        run: python -m unittest discover -s tests -v
+
+      - name: Acquire exact pinned WDBC bytes for control preflight only
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import urllib.request
+
+          url = (
+              "https://raw.githubusercontent.com/rzaroz/BreastCancer/"
+              "df2a0919eacd8e98e9242c8f4002a231e6eb57eb/"
+              "MainDatasets/BreastCancerWisconsin%28Diagnostic%29.csv"
+          )
+          request = urllib.request.Request(
+              url,
+              headers={"User-Agent": "BreastCancer-Imbalance-Benchmark_35/P4A-control"},
+          )
+          with urllib.request.urlopen(request, timeout=60) as response:
+              payload = response.read()
+          if not payload:
+              raise RuntimeError("pinned WDBC download returned zero bytes")
+          Path("/tmp/wdbc.csv").write_bytes(payload)
+          print("P4A_DATASET_ACQUISITION=PASS")
+          PY
+
+      - name: Run full non-result-bearing P4A control gate
+        run: |
+          rm -rf /tmp/p4a-control
+          python scripts/p4a_control.py \
+            --dataset /tmp/wdbc.csv \
+            --repo-root . \
+            --expected-git-commit "$EXPECTED_HEAD" \
+            --control-root /tmp/p4a-control \
+            --authorization-ref "GitHub Issue #11 P4A implementation authorization" \
+            | tee /tmp/p4a-control.log
+
+      - name: Verify P4A gates and evidence
+        run: |
+          grep -q '^P3_PREFLIGHT_GATE=PASS$' /tmp/p4a-control.log
+          grep -q '^P3_DRY_RUN_GATE=PASS$' /tmp/p4a-control.log
+          grep -q '^P4A_CONTROL_GATE=PASS$' /tmp/p4a-control.log
+          grep -q '^P4B_AUTHORIZED=false$' /tmp/p4a-control.log
+          grep -q '^RESULT_BEARING=false$' /tmp/p4a-control.log
+          grep -q '^SCIENTIFIC_EXECUTION=0$' /tmp/p4a-control.log
+          test -s /tmp/p4a-control/preflight/p3_preflight_report.json
+          test -s /tmp/p4a-control/preflight/p3_preflight_report.json.sha256
+          test -s /tmp/p4a-control/preflight/p3_execution_plan.json
+          test -s /tmp/p4a-control/preflight/p3_execution_plan.json.sha256
+          test -s /tmp/p4a-control/preflight/pip_freeze.txt
+          test -s /tmp/p4a-control/preflight/pip_freeze.txt.sha256
+          test -s /tmp/p4a-control/manifests/p4a_control_manifest.json
+          test -s /tmp/p4a-control/manifests/p4a_control_manifest.json.sha256
+          test -s /tmp/p4a-control/manifests/p4a_path_policy_report.json
+          test -s /tmp/p4a-control/manifests/p4a_path_policy_report.json.sha256
+          test -s /tmp/p4a-control/receipts/p4a_receipt_index.json
+          test -s /tmp/p4a-control/receipts/p4a_receipt_index.json.sha256
+          echo "P4A_EVIDENCE_WRITE_GATE=PASS"
+          echo "P4B_AUTHORIZED=false"
+          echo "RESULT_BEARING=false"
+          echo "SCIENTIFIC_EXECUTION=0"
+
+      - name: Upload P4A non-result-bearing control evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: p4a-execution-control
+          path: |
+            /tmp/p4a-control/
+            /tmp/p4a-control.log
+          if-no-files-found: error
+          retention-days: 90
