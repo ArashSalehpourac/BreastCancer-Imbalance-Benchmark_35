@@ -159,6 +159,10 @@ def _worker_execute_one(args: argparse.Namespace) -> int:
         raise RuntimeError("P4B worker mode requires controller authorization")
     if not args.task_id or not args.authorization or not args.run_root:
         raise RuntimeError("P4B worker missing exact authorization/task/run-root arguments")
+    if sys.version_info[:2] != (3, 12):
+        raise RuntimeError(
+            f"P4B worker requires Python 3.12 before scientific imports; got {sys.version.split()[0]}"
+        )
 
     plan_payload = json.loads(Path(args.plan).read_text(encoding="utf-8"))
     matching = [task for task in plan_payload.get("tasks", []) if task.get("task_id") == args.task_id]
@@ -183,9 +187,17 @@ def _worker_execute_one(args: argparse.Namespace) -> int:
     if Path(args.run_root).exists():
         raise RuntimeError("immutable P4B first-run root already exists before worker import")
 
-    # Scientific modules are deliberately imported only after the process-level
-    # deterministic environment and unused run root have been validated.
-    from bcimbalance.execution_harness import verify_exact_git_commit
+    # Foundation/config modules may now be imported because the deterministic
+    # process environment has already been fixed. Verify current direct package
+    # pins before importing the scientific task executor itself.
+    from bcimbalance.execution_harness import verify_direct_pins, verify_exact_git_commit
+
+    realized_pins = verify_direct_pins()
+    print(f"P4B_WORKER_DIRECT_PINS={json.dumps(realized_pins, sort_keys=True)}")
+    print("P4B_WORKER_DIRECT_PINS_GATE=PASS")
+
+    # The result-bearing executor is deliberately imported only after all
+    # process-level and package-version gates above have passed.
     from bcimbalance.scientific_task import run_authorized_task
 
     verify_exact_git_commit(args.repo_root, args.expected_git_commit)
