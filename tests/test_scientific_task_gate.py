@@ -62,7 +62,8 @@ class P4BScientificGateTests(unittest.TestCase):
         self.assertIn('"PYTHONHASHSEED": str(seed)', text)
         self.assertIn('"MKL_NUM_THREADS": "1"', text)
         self.assertIn('"OPENBLAS_NUM_THREADS": "1"', text)
-        self.assertIn("Scientific modules are deliberately imported only after", text)
+        self.assertIn("result-bearing executor is deliberately imported only after", text)
+        self.assertIn("P4B_WORKER_DIRECT_PINS_GATE=PASS", text)
         self.assertIn("immutable P4B first-run root already exists", text)
 
     def test_worker_checks_environment_before_scientific_import_textually(self) -> None:
@@ -70,9 +71,12 @@ class P4BScientificGateTests(unittest.TestCase):
         worker_start = text.index("def _worker_execute_one")
         worker = text[worker_start:]
         env_check = worker.index('required_env = {')
+        pin_check = worker.index("realized_pins = verify_direct_pins()")
         scientific_import = worker.index("from bcimbalance.scientific_task import run_authorized_task")
-        self.assertLess(env_check, scientific_import)
+        self.assertLess(env_check, pin_check)
+        self.assertLess(pin_check, scientific_import)
         self.assertIn('os.environ.get("P4B_AUTHORIZED_WORKER") != "1"', worker[:scientific_import])
+        self.assertIn("sys.version_info[:2] != (3, 12)", worker[:scientific_import])
         self.assertIn("Path(args.run_root).exists()", worker[:scientific_import])
 
     def test_validation_modules_contain_no_scientific_calls(self) -> None:
