@@ -92,6 +92,10 @@ def _controller_execute_one(args: argparse.Namespace) -> int:
         expected_run_root=args.run_root,
         realized_pip_freeze_path=args.pip_freeze,
     )
+    if Path(args.run_root).exists():
+        raise P4BAuthorizationError(
+            "immutable P4B first-run root already exists; reuse is forbidden"
+        )
 
     plan = load_frozen_plan(args.plan)
     task = find_exact_task(plan, args.task_id)
@@ -176,9 +180,11 @@ def _worker_execute_one(args: argparse.Namespace) -> int:
             )
     if not os.environ.get("P4B_AUTHORIZATION_SHA256"):
         raise RuntimeError("P4B worker authorization receipt is missing")
+    if Path(args.run_root).exists():
+        raise RuntimeError("immutable P4B first-run root already exists before worker import")
 
     # Scientific modules are deliberately imported only after the process-level
-    # deterministic environment has been validated.
+    # deterministic environment and unused run root have been validated.
     from bcimbalance.execution_harness import verify_exact_git_commit
     from bcimbalance.scientific_task import run_authorized_task
 
