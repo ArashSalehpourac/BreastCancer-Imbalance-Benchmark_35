@@ -1,0 +1,44 @@
+{
+  "authorized_base": "57f721960f87ac189851024b477fbcdb771a7ed4",
+  "canonical_colab_dataset_path": "/content/drive/MyDrive/35/01_Experiment_Evidence/00_Dataset/wdbc_canonical_lf.csv",
+  "design": {
+    "outer_folds": 50,
+    "planned_tasks": 3600,
+    "positive_class": "M",
+    "primary_conditions": 24,
+    "replicates": 3,
+    "threshold": 0.5
+  },
+  "frozen_identities": {
+    "dataset_sha256": "27f219231dbb30eecbfc1361407ed641ea01be43316e2c707a1baf82c9795e23",
+    "foundation_sha256": "49291df347b8aa8453a68cf06296642f3939bfc3fe51ce452d3620d9c228e030",
+    "p1_foundation_merge": "2e6c405c6dce747fc86e3d72252f7a78831f1771",
+    "p2_config_sha256": "71e82edad62dcf06382cf85dcd87e642049e80668eaa7dbd9913d7a5a5bb7dc9",
+    "p2_merge": "8c6ff728375de033b32fac8b32240a22e98401e1",
+    "p3_merge": "57f721960f87ac189851024b477fbcdb771a7ed4",
+    "p3_result_schema_sha256": "7819dd71c49d3c5c686ca76079a92f0b5399596d0de71d2964eca8ece8af4686",
+    "protocol_commit": "00765102707ca0cce5b169af2b6436a91c643a87",
+    "seed_registry_sha256": "985f5614275ef880213bf775cded0b8e3867fb011f43df817b48d94bb5af73e2",
+    "split_sha256": "00114e7735fc4eb012ecf248010b18b441cce4a74e0d1540115bbaff543d764a"
+  },
+  "future_required_subdirectories": [
+    "preflight",
+    "manifests",
+    "splits",
+    "raw",
+    "checkpoints",
+    "logs",
+    "receipts"
+  ],
+  "future_result_bearing_root": "/content/drive/MyDrive/35/01_Experiment_Evidence/P4_Result_Bearing_Runs",
+  "future_task_record_mapping": {
+    "source_prefix": "evidence/conditions/",
+    "target_prefix": "raw/conditions/"
+  },
+  "issue_number": 11,
+  "p4a_control_root": "/content/drive/MyDrive/35/01_Experiment_Evidence/P4A_Control_Validation",
+  "p4b_authorized": false,
+  "protocol_version": "1.0",
+  "result_bearing": false,
+  "schema_version": "p4a-execution-control-policy/v1"
+}
