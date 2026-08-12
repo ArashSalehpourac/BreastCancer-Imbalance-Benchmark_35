@@ -53,6 +53,7 @@ class P4BScientificGateTests(unittest.TestCase):
         scientific_position = source.index("_execute_scientific_task(")
         self.assertLess(authorization_position, path_creation_position)
         self.assertLess(authorization_position, scientific_position)
+        self.assertIn("immutable P4B first-run root already exists", source)
 
     def test_controller_dispatches_isolated_worker_with_preimport_environment(self) -> None:
         text = SCRIPT.read_text(encoding="utf-8")
@@ -96,11 +97,13 @@ class P4BScientificGateTests(unittest.TestCase):
     def test_scientific_calls_exist_only_in_future_executor_module(self) -> None:
         text = (ROOT / "src" / "bcimbalance" / "scientific_task.py").read_text(encoding="utf-8")
         self.assertIn("model.fit(", text)
-        self.assertIn("fit_resample(", text)
+        self.assertIn('"fit_resample"', text)
         self.assertIn("sample_from_conditions(", text)
         self.assertIn("predict_proba(", text)
         self.assertIn("_compute_metrics(", text)
         self.assertIn("validate_authorization(", text)
+        self.assertIn("quality_diagnostics", text)
+        self.assertIn("classifier_parameters_realized", text)
 
 
 if __name__ == "__main__":
